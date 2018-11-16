@@ -28,6 +28,11 @@ from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
 
 warnings.simplefilter("ignore")
+
+NUM_OF_PARTS_VERTICAL = 6
+NUM_OF_PARTS_HORIZONTAL = 10
+MARGIN_HORIZONTAL = 20
+MARGIN_VERTICAL = 50
     
 def szary(img):
     temp = rgb2hsv(img)
@@ -39,7 +44,7 @@ def gamma(img):
     return (img**g)
 
 def dynamicGamma(img, mean, std):
-    TARGET = mean + (std*0.8)
+    TARGET = (mean*0.9) + (std*0.8)
     diff = TARGET - np.mean(img)
     """0.78**0.48 = 0.88
     0.88**0.58 = 0.93"""
@@ -60,15 +65,19 @@ def contrast(img):
 def dynamicContrast(img):
     MIN = np.percentile(img, 0.3)
     MAX = np.percentile(img, 98)
+    #MIN = 0.3
+    #MAX = 0.9
     norm = (img - MIN) / (MAX - MIN)
     norm[norm[:,:] > 1] = 1
     norm[norm[:,:] < 0] = 0
     return norm
 
-def threshold(img):
-    return (img > 0.8)
-
 def dynamicThreshold(img):
+    #zdj3hd: 0.75
+    thr = np.mean(img) - np.std(img) * 1.5
+    return (img > thr)
+
+def threshold(img):
     return (img > 0.8)
 
 def dynamicProcessing(img):
@@ -146,8 +155,9 @@ def verifyContours(contoursAll):
     #usuniecie za malych konturow (bledy)
     contoursTemp = []
     for contour in contoursAll:
-        if(max(contour[:,0])-min(contour[:,0]) > 8):
-            contoursTemp.append(contour)
+        if(8 < (max(contour[:,0])-min(contour[:,0])) < 70):
+            if(10 < (max(contour[:,1])-min(contour[:,1])) < 55):
+                contoursTemp.append(contour)
     #posortowanie (numeracja od lewej do prawej na pieciolinii)
     contoursTemp.sort(key=lambda contour: min(contour[:,1]))
     #usuniecie konturow wewnatrz pustych cial nut
@@ -175,22 +185,28 @@ meanGamma = np.mean(img)
 std = np.std(img)
 print(meanGamma)
 print(std)
-NUM_OF_PARTS = 10
-partWidth = int(len(img[0])/NUM_OF_PARTS)
-partHeight = int(len(img)/NUM_OF_PARTS)
 
-fig1, cx = plt.subplots(4, figsize=(30,40))
-i=0
-for r in range(0,NUM_OF_PARTS):
-    for c in range(0,NUM_OF_PARTS):
-        row1 = r*partHeight
+partWidth = int(len(img[0])/NUM_OF_PARTS_HORIZONTAL)
+partHeight = int((len(img)-(MARGIN_VERTICAL*2))/NUM_OF_PARTS_VERTICAL)
+
+"""fig1, cx = plt.subplots(4, figsize=(30,40))
+i=0"""
+for r in range(0,NUM_OF_PARTS_VERTICAL):
+    for c in range(0,NUM_OF_PARTS_HORIZONTAL):
+        row1 = (r*partHeight)+50
         col1 = c*partWidth
-        row2 = (r+1)*partHeight
+        row2 = ((r+1)*partHeight)+50
         col2 = (c+1)*partWidth
         part = img[row1:row2,col1:col2]
         part = dynamicGamma(part, meanGamma, std)
         img[row1:row2,col1:col2] = dynamicGamma(part, meanGamma, std)
         """if( (r == 3) and ((c == 1) or (c==9))):
+            jasn = np.mean(part)
+            stdd = np.std(part)
+            mini = np.percentile(part, 0.3)
+            maksi = np.percentile(part, 98)
+            print(str(r) + ',' + str(c) + ': jasnosc: ' + str(jasn) + ', std: ' + str(stdd))
+            print('mini: ' + str(mini) + ', maksi: ' + str(maksi))
             cx[i].imshow(part, cmap='gray')
             i += 1
             cx[i].hist(part, range=(0,1.0))
@@ -200,12 +216,21 @@ for r in range(0,NUM_OF_PARTS):
 bx[1].imshow(img, cmap='gray')
 #n, bins, patches = plt.hist(img)
 #plt.show()
-img = contrast(img)
+#img = contrast(img)
+img = dynamicContrast(img)
 bx[2].imshow(img, cmap='gray')
-img = threshold(img)
+
+for r in range(0,NUM_OF_PARTS_VERTICAL):
+    for c in range(0,NUM_OF_PARTS_HORIZONTAL):
+        row1 = r*partHeight+MARGIN_VERTICAL
+        col1 = c*partWidth
+        row2 = (r+1)*partHeight+MARGIN_VERTICAL
+        col2 = (c+1)*partWidth
+        img[row1:row2,col1:col2] = dynamicThreshold(img[row1:row2,col1:col2])
+#img = threshold(img)
 bx[3].imshow(img, cmap='gray')
 
-""""""
+
 
 #znalezienie linii
 sumRows = np.sum(img, axis = 1)
@@ -237,15 +262,16 @@ for n, row in enumerate(sumRows):
             sumRows[n+1] = True;
         else:
             fragmentFound = False;
-            fragmentBounds.append([start,n])
+            if ((n - start) > 60):
+                fragmentBounds.append([start,n])
 
 for n, fragment in enumerate(fragmentBounds):
-    upper = fragment[0] - 30
-    if (upper < 0):
-        upper = 0
-    lower = fragment[1] + 30
-    if (lower > len(img)):
-        lower = len(img)
+    upper = fragment[0] - 60
+    if (upper < MARGIN_VERTICAL):
+        upper = MARGIN_VERTICAL
+    lower = fragment[1] + 40
+    if (lower > len(img)-MARGIN_VERTICAL):
+        lower = len(img)-MARGIN_VERTICAL
     fragmentBounds[n] = [upper,lower]
 
 numOfFrags = len(fragmentBounds)
@@ -292,7 +318,7 @@ for i in range(0,numOfFrags):
         for r in range(tm, bm + 1):
             for c in range(lm, rm + 1):
                 if (polygon.contains(Point(r,c))):
-                    if (part[r][c] == 1):
+                    if (part[r,c] == 1):
                         white += 1
                     else:
                         black += 1
@@ -339,5 +365,6 @@ for i in range(0,numOfFrags):
         ax[i*2].annotate(str(closest), xy = ((lm + rm)/2, (tm - 9)), fontsize = 10)
         #ax[(i+1)*2].annotate('fill '+ str(round(fillRatio,2)), xy = ((lm + rm)/2, (tm - 25)), fontsize = 50)
         #ax[4].plot(contour[:, 1], contour[:, 0], linewidth=2, color='red')
-        """"""
+        """
+        """
 print('end')
