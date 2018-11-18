@@ -46,7 +46,7 @@ def extractPage(fileName):
     cv2.destroyAllWindows()
 
     contours = cv2.findContours(edged.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    contours = cnts[0] if imutils.is_cv2() else contours[1]
+    contours = conturs[0] if imutils.is_cv2() else contours[1]
     # select 5 contours with biggest areas
     contours = sorted(contours, key = cv2.contourArea, reverse = True)[:5]
  
