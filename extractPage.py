@@ -41,6 +41,9 @@ def extractPage(fileName):
     gray = cv2.GaussianBlur(gray, (5, 5), 0)
     # edged contains downsized blurrd image ready to find contours
     edged = cv2.Canny(gray, 75, 200)
+    cv2.imshow("ready to extract", edged)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
     contours = cv2.findContours(edged.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     contours = cnts[0] if imutils.is_cv2() else contours[1]
@@ -49,6 +52,7 @@ def extractPage(fileName):
  
     # find contour that approximates to a tetragon
     for c in contours:
+        c = cv2.convexHull(c, False)
         perimeter = cv2.arcLength(c, True)
         approx = cv2.approxPolyDP(c, 0.02 * perimeter, True)
         if len(approx) == 4:
@@ -56,6 +60,8 @@ def extractPage(fileName):
             break
 
     # transform page extracted from picture to a rectangle
-    wrpd = transformToRectangle(original, pageContour.reshape(4, 2) * ratio)
-    transformed = cv2.cvtColor(wrpd, cv2.COLOR_BGR2GRAY)
+    transformed = transformToRectangle(original, pageContour.reshape(4, 2) * ratio)
+    (height, width, _) = np.shape(transformed)
+    factor =  1492/width
+    transformed = cv2.resize(transformed, (int(width*factor), int(height*factor)))
     return transformed
