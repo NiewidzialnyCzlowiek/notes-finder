@@ -3,7 +3,7 @@ from recognizeNotes import recognizeNotes
 from extractPage import extractPage
 
 def main():
-    extracted = extractPage("./input-images/notes5.jpeg")
+    extracted = extractPage("./input-images/notes1.jpg")
     cv2.imshow("extracted", extracted)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
