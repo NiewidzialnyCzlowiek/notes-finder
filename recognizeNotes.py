@@ -221,7 +221,7 @@ def recognizeNotes(image):
     numOfFrags = len(fragmentBounds)
     print(numOfFrags)
 
-    fragment = [];
+    fragment = []
     for i in range(0,numOfFrags):
         fragment.append(img[fragmentBounds[i][0]:fragmentBounds[i][1]])
         part = fragment[i]
@@ -233,6 +233,9 @@ def recognizeNotes(image):
         part = mp.erosion(part)
         contoursAll = ski.measure.find_contours(part, 0.5)
         contours, key = verifyContours(contoursAll)
+        cv2.imshow("part", part)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
                     
         #analize each note
         oldStaffRows = []
@@ -242,18 +245,18 @@ def recognizeNotes(image):
             bm = int(round(max(contour[:,0]))) #bottomMargin
             lm = int(round(min(contour[:,1]))) #leftMargin
             rm = int(round(max(contour[:,1]))) #rightMargin
-            polygon = Polygon(contour)
+            # polygon = Polygon(contour)
 
             #calculate fill ratio of note
-            black = 0
-            white = 0
-            for r in range(tm, bm + 1):
-                for c in range(lm, rm + 1):
-                    if (polygon.contains(Point(r,c))):
-                        if (part[r,c] == 1):
-                            white += 1
-                        else:
-                            black += 1
+            # black = 0
+            # white = 0
+            # for r in range(tm, bm + 1):
+            #     for c in range(lm, rm + 1):
+            #         if (polygon.contains(Point(r,c))):
+            #             if (part[r,c] == 1):
+            #                 white += 1
+            #             else:
+            #                 black += 1
             #fillRatio = black/(black + white)
 
             #find staff lines and position of note
@@ -286,4 +289,7 @@ def recognizeNotes(image):
                     closest = current
                 current += 0.5
 
-            print(classifyNote(closest))
+            cv2.imshow("note", part[tm:bm,lm:rm])
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+            print(classifyNote(closest, part[tm:bm,lm:rm]))
