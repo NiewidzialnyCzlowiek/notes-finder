@@ -6,6 +6,7 @@ import numpy as np
 import math
 from numpy import array
 from classifyNote import classifyNote
+from classifyKey import classifyKey
 from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
 
@@ -117,7 +118,7 @@ def locateStaffRows(sumRows):
         else:
             if foundStaff:
                 staffRows.append( ((i+1) + end)/2 )
-                foundStaff = False;
+                foundStaff = False
     if(len(staffRows) == 5):
         for i in range(1,8,2):
             staffRows.insert( i, ((staffRows[i-1] + staffRows[i]) / 2) )
@@ -152,8 +153,6 @@ def recognizeNotes(image):
     img = szary(image)
     meanGamma = np.mean(img)
     std = np.std(img)
-    print(meanGamma)
-    print(std)
 
     partWidth = int(len(img[0])/NUM_OF_PARTS_HORIZONTAL)
     partHeight = int((len(img)-(MARGIN_VERTICAL*2))/NUM_OF_PARTS_VERTICAL)
@@ -231,12 +230,17 @@ def recognizeNotes(image):
         part = removeStaff(part, sumRowsCpy[fragmentBounds[i][0]:fragmentBounds[i][1]])
         part = mp.dilation(part)
         part = mp.erosion(part)
+
         contoursAll = ski.measure.find_contours(part, 0.5)
-        contours, key = verifyContours(contoursAll)
+        contours, _ = verifyContours(contoursAll)
+        keyImage = part[:,40:120]
+
         cv2.imshow("part", part)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
-                    
+
+        Labels = []
+        Labels.append(classifyKey(keyImage))
         #analize each note
         oldStaffRows = []
         for noteNumber, contour in enumerate(contours):
@@ -245,20 +249,6 @@ def recognizeNotes(image):
             bm = int(round(max(contour[:,0]))) #bottomMargin
             lm = int(round(min(contour[:,1]))) #leftMargin
             rm = int(round(max(contour[:,1]))) #rightMargin
-            # polygon = Polygon(contour)
-
-            #calculate fill ratio of note
-            # black = 0
-            # white = 0
-            # for r in range(tm, bm + 1):
-            #     for c in range(lm, rm + 1):
-            #         if (polygon.contains(Point(r,c))):
-            #             if (part[r,c] == 1):
-            #                 white += 1
-            #             else:
-            #                 black += 1
-            #fillRatio = black/(black + white)
-
             #find staff lines and position of note
             beforeNote = partWithStaff[:, lm-6:lm-1]
             sumRowsNote = np.sum(beforeNote, axis = 1)
@@ -273,10 +263,6 @@ def recognizeNotes(image):
                 oldStaffRows = staffRows.copy()
             else:
                 staffRows = oldStaffRows.copy()
-
-    ## zapisywanie nierozstrzygnietych nut i obliczanie przy najblizszej okazji?
-    ## uwzglednienie topMargin
-
             #calculate closest line
             closest = 0.5
             current = 0.5
@@ -288,8 +274,5 @@ def recognizeNotes(image):
                     currentDiff = abs(bm - staff)
                     closest = current
                 current += 0.5
-
-            cv2.imshow("note", part[tm:bm,lm:rm])
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
-            print(classifyNote(closest, part[tm:bm,lm:rm]))
+            Labels.append(classifyNote(closest, part[tm:bm,lm:rm]))
+        print(Labels)
