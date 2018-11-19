@@ -32,15 +32,34 @@ def transformToRectangle(image, pts):
     warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
     return warped
 
+def preprocess(img):
+    mean = np.mean(img)
+    alpha = 1 - mean/510
+    img = cv2.convertScaleAbs(img, alpha=alpha, beta=0)
+    # transform to LAB color scheme
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+    # split channels
+    l, a, b = cv2.split(lab)
+    # apply CLAHE to l channel
+    clahe = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(8,8))
+    cl = clahe.apply(l)
+    # merge channels
+    limg = cv2.merge((cl,a,b))
+
+    final = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+    return final
+
 def extractPage(fileName):
     original = cv2.imread(fileName)
     ratio = original.shape[0] / 500.0
     downsized = imutils.resize(original, height = 500)
- 
+    
+    gray = preprocess(downsized)
     gray = cv2.cvtColor(downsized, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (5, 5), 0)
     # edged contains downsized blurrd image ready to find contours
-    edged = cv2.Canny(gray, 75, 200)
+    edged = cv2.Canny(gray, gray.min(), gray.max())
+
     cv2.imshow("ready to extract", edged)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
@@ -49,19 +68,31 @@ def extractPage(fileName):
     contours = contours[0] if imutils.is_cv2() else contours[1]
     # select 5 contours with biggest areas
     contours = sorted(contours, key = cv2.contourArea, reverse = True)[:5]
- 
+
     # find contour that approximates to a tetragon
+    cnts = []
+    found = False
     for c in contours:
-        c = cv2.convexHull(c, False)
+        c = cv2.convexHull(c)
+        cnts.append(c)
         perimeter = cv2.arcLength(c, True)
-        approx = cv2.approxPolyDP(c, 0.02 * perimeter, True)
+        approx = cv2.approxPolyDP(c, 0.01 * perimeter, True)
         if len(approx) == 4:
             pageContour = approx
+            found = True
             break
+    if not found:
+        return original, False
+
+    mask = np.zeros(edged.shape, np.uint8)
+    cv2.drawContours(mask, [cnts[0]], -1, 255, -1)
+    cv2.imshow("contours", mask)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
     # transform page extracted from picture to a rectangle
     transformed = transformToRectangle(original, pageContour.reshape(4, 2) * ratio)
     (height, width, _) = np.shape(transformed)
     factor =  1492/width
     transformed = cv2.resize(transformed, (int(width*factor), int(height*factor)))
-    return transformed
+    return transformed, True
