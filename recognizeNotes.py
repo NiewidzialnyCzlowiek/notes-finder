@@ -9,6 +9,8 @@ from classifyNote import classifyNote
 from classifyKey import classifyKey
 from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
+from os import makedirs
+from os.path import exists
 
 # warnings.simplefilter("ignore")
 
@@ -144,10 +146,7 @@ def verifyContours(contoursAll):
     return contours, contoursTemp[0]
 
 #MAIN
-def recognizeNotes(image):
-##
-##  TO DO: Podzial obrazka i obrobka mniejszych fragmentow         #########################################
-##
+def recognizeNotes(image, directory, fileName, saveImages):
     print("recognizing")
     #obróbka zdjęcia
     img = szary(image)
@@ -180,9 +179,6 @@ def recognizeNotes(image):
     sumRows = (sumRows < (np.mean(sumRows)*0.8)) #true for row with staff line
     sumRowsCpy = sumRows.copy()
 
-    cv2.imshow("preprocessed", img)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
     #wydzielenie osobnych fragmentów dla kadej 5-linii
     fragmentBounds = []
     fragmentFound = False
@@ -220,6 +216,9 @@ def recognizeNotes(image):
     numOfFrags = len(fragmentBounds)
     print(numOfFrags)
 
+    if not exists(directory + "/" + fileName):
+        makedirs(directory + "/" + fileName)
+
     fragment = []
     for i in range(0,numOfFrags):
         fragment.append(img[fragmentBounds[i][0]:fragmentBounds[i][1]])
@@ -235,9 +234,10 @@ def recognizeNotes(image):
         contours, _ = verifyContours(contoursAll)
         keyImage = part[:,40:120]
 
-        cv2.imshow("part", part)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        if saveImages:
+            toSave = part.copy()
+            toSave[toSave > 0] = 255
+            cv2.imwrite(directory + "/" + fileName + "/part" + str(i) + ".jpg", toSave)
 
         Labels = []
         Labels.append(classifyKey(keyImage))
@@ -275,4 +275,5 @@ def recognizeNotes(image):
                     closest = current
                 current += 0.5
             Labels.append(classifyNote(closest, part[tm:bm,lm:rm]))
-        print(Labels)
+        with open(directory + "/" + fileName + "/part" + str(i) + ".txt", "w") as text_file:
+            text_file.write(str(Labels))
