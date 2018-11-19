@@ -25,26 +25,30 @@ def classifyNote(value, noteImage):
     (height, width) = np.shape(noteImage)
     if height/width > 1.3 or height > 30:
         # staffed
-        staff = " Staff"
         rightEdge = noteImage[:, int(width/5)*4:]
         if isFilled(rightEdge, 0.6):
-            tail = " No tail"
+            tail = False
             noteCenter = noteImage[int(height/12)*9 : height - int(height/12), int(width/4) : width - int(width/4)]
         else:
-            tail = " Tail"
+            tail = True
             noteCenter = noteImage[int(height/12)*9 : height - int(height/12), int(width/8) : int(width/8) * 3]
         if isFilled(noteCenter, 0.5):
-            filled = " Filled"
+            filled = True
         else:
-            filled = " Not filled"
+            filled = False
+        if filled:
+            if tail:
+                name = "Osemka"
+            else:
+                name = "Cwiercnuta"
+        elif tail:
+            name = "Polnuta"
     else:
         # not staffed
-        staff = " No staff"
         noteCenter = noteImage[int(height/4) : height - int(height/4), int(width/4) : width - int(width/4)]
-        if isFilled(noteCenter, 0.5):
-            filled = " Filled"
+        if not isFilled(noteCenter, 0.5):
+            name = "Cala nuta"
         else:
-            filled = " Not filled"
-        tail = " Not applicable"
+            name = "Cala nuta"
 
-    return value + staff + filled + tail
+    return name
