@@ -24,23 +24,11 @@ def szary(img):
     temp[:,:,1] = 0
     return rgb2gray(hsv2rgb(temp))   
     
-def gamma(img):
-    g = np.mean(img) - 0.3
-    return (img**g)
-
 def dynamicGamma(img, mean, std):
-    TARGET = (mean*0.9) + (std*0.8)
+    TARGET = ( (2*(mean) + np.mean(img))/3 )*0.9 + (std*0.8)
     diff = TARGET - np.mean(img)
     g = math.log(TARGET, np.mean(img))
     return (img**g)
-    
-def contrast(img):
-    MIN = np.percentile(img, 0.3)
-    MAX = np.percentile(img, 98)
-    norm = (img - MIN) / (MAX - MIN)
-    norm[norm[:,:] > 1] = 1
-    norm[norm[:,:] < 0] = 0
-    return norm
 
 def dynamicContrast(img):
     MIN = np.percentile(img, 0.3)
@@ -50,40 +38,28 @@ def dynamicContrast(img):
     norm[norm[:,:] < 0] = 0
     return norm
 
-def dynamicThreshold(img):
-    thr = np.mean(img) - np.std(img) * 1.5
+def dynamicThreshold(img, correction, r, c):
+    thr = np.mean(img) * (1.05+correction) - np.std(img) * 1.5
+    whiteRatio = sum(sum(img > thr))/(len(img)*len(img[0]))
+    while whiteRatio < 0.84:
+        thr -= 0.01
+        whiteRatio = sum(sum(img > thr))/(len(img)*len(img[0]))
+    sumRows = np.sum(img, axis = 1)
+    sumRows = (sumRows < (np.mean(sumRows)))
+    steps = 0
+    print(str(r) + ',' + str(c) + ': sumRows std: ' + str(np.std(sumRows)) + ', whiteRatio: ' + str(whiteRatio) + ', thr: ' + str(thr))
+    for i in range(30 + steps):
+        if (sum(sumRows) > 45 or whiteRatio > 0.9):
+            break
+        thr -= 0.01
+        sumRows = np.sum(img, axis = 1)
+        sumRows = (sumRows < (np.mean(sumRows)))
+        whiteRatio = sum(sum(img > thr))/(len(img)*len(img[0]))
+    whiteRatio = sum(sum(img > thr))/(len(img)*len(img[0]))
+    print(str(r) + ',' + str(c) + ': sumRows std: ' + str(np.std(sumRows)) + ', whiteRatio: ' + str(whiteRatio) + ', thr: ' + str(thr))
+    
     return (img > thr)
 
-def threshold(img):
-    return (img > 0.8)
-
-def dynamicProcessing(img):
-    img = szary(img)
-    meanGamma = np.mean(img)
-    std = np.std(img)
-    NUM_OF_PARTS = 5
-    partWidth = int(len(img[0])/NUM_OF_PARTS)
-    partHeight = int(len(img)/NUM_OF_PARTS)
-    for r in range(0,NUM_OF_PARTS):
-        for c in range(0,NUM_OF_PARTS):
-            row1 = r*partHeight
-            col1 = c*partWidth
-            row2 = (r+1)*partHeight
-            col2 = (c+1)*partWidth
-            part = img[row1:row2,col1:col2]
-            part = dynamicGamma(part, meanGamma, std)
-            part = dynamicGamma(part, meanGamma, std)
-            part = dynamicContrast(part)
-            img[row1:row2,col1:col2] = dynamicThreshold(part)
-    return img
-
-def imageProcessing(img):
-    img = szary(img)
-    img = gamma(img)
-    img = gamma(img)
-    img = contrast(img)
-    img = threshold(img)
-    return img
 
 def removeStaff(img, sumRows):
     height = len(img) - 1
@@ -143,7 +119,7 @@ def verifyContours(contoursAll):
         contourPrevious = contoursTemp[n]
         if not ( (min(contour[:,1]) < max(contourPrevious[:,1])) and ( (max(contour[:,1])) < (max(contourPrevious[:,1])) ) ):
             contours.append(contour)
-    return contours, contoursTemp[0]
+    return contours
 
 #MAIN
 def recognizeNotes(image, directory, fileName, saveImages):
@@ -155,66 +131,77 @@ def recognizeNotes(image, directory, fileName, saveImages):
 
     partWidth = int(len(img[0])/NUM_OF_PARTS_HORIZONTAL)
     partHeight = int((len(img)-(MARGIN_VERTICAL*2))/NUM_OF_PARTS_VERTICAL)
+    img[0:MARGIN_VERTICAL, :] = 1
+    img[(len(img)-MARGIN_VERTICAL):(len(img)-1), :] = 1
+    img[:,0:MARGIN_HORIZONTAL] = 1
+    img[:,(len(img[0])-MARGIN_HORIZONTAL):(len(img[0])-1)] = 1
 
     for r in range(0,NUM_OF_PARTS_VERTICAL):
         for c in range(0,NUM_OF_PARTS_HORIZONTAL):
-            row1 = (r*partHeight)+50
+            row1 = (r*partHeight)+MARGIN_VERTICAL
             col1 = c*partWidth
-            row2 = ((r+1)*partHeight)+50
+            row2 = ((r+1)*partHeight)+MARGIN_VERTICAL
             col2 = (c+1)*partWidth
-            img[row1:row2,col1:col2] = dynamicGamma(img[row1:row2,col1:col2], meanGamma, std)
+            part = img[row1:row2,col1:col2]
+            part = dynamicGamma(part, meanGamma, std)
+            img[row1:row2,col1:col2] = dynamicGamma(part, meanGamma, std)
 
     img = dynamicContrast(img)
 
-    for r in range(0,NUM_OF_PARTS_VERTICAL):
-        for c in range(0,NUM_OF_PARTS_HORIZONTAL):
-            row1 = r*partHeight+MARGIN_VERTICAL
-            col1 = c*partWidth
-            row2 = (r+1)*partHeight+MARGIN_VERTICAL
-            col2 = (c+1)*partWidth
-            img[row1:row2,col1:col2] = dynamicThreshold(img[row1:row2,col1:col2])
-
-    #znalezienie linii
-    sumRows = np.sum(img, axis = 1)
-    sumRows = (sumRows < (np.mean(sumRows)*0.8)) #true for row with staff line
-    sumRowsCpy = sumRows.copy()
-
-    #wydzielenie osobnych fragmentów dla kadej 5-linii
+    sumRows = []
+    sumRowsCpy = []
     fragmentBounds = []
-    fragmentFound = False
-    # rowLen = len(img[0])
-    start = 0
-    for n, row in enumerate(sumRows):
-        if row:
-            if not fragmentFound:
-                fragmentFound = True
-                start = n
-            #przeszukaj 20 nastepnych wierszy
-            foundLine = False
-            for a in range(1,21):
-                if (n+a >= len(sumRows)):
-                    break
-                elif sumRows[n+a]:
-                    foundLine = True
-                    break
-            if foundLine:
-                sumRows[n+1] = True
-            else:
-                fragmentFound = False
-                if ((n - start) > 60):
-                    fragmentBounds.append([start,n])
+    thrCorrection = 0
+    numOfFrags = 0
+    while True:
+        for r in range(0,NUM_OF_PARTS_VERTICAL):
+            for c in range(0,NUM_OF_PARTS_HORIZONTAL):
+                row1 = r*partHeight+MARGIN_VERTICAL
+                col1 = c*partWidth
+                row2 = (r+1)*partHeight+MARGIN_VERTICAL
+                col2 = (c+1)*partWidth
+                img[row1:row2,col1:col2] = dynamicThreshold(img[row1:row2,col1:col2], thrCorrection, r, c)
 
-    for n, fragment in enumerate(fragmentBounds):
-        upper = fragment[0] - 60
-        if (upper < MARGIN_VERTICAL):
-            upper = MARGIN_VERTICAL
-        lower = fragment[1] + 40
-        if (lower > len(img)-MARGIN_VERTICAL):
-            lower = len(img)-MARGIN_VERTICAL
-        fragmentBounds[n] = [upper,lower]
+        #znalezienie linii
+        sumRows = np.sum(img, axis = 1)
+        sumRows = (sumRows < (np.mean(sumRows)*0.9)) #true for row with staff line
+        sumRowsCpy = sumRows.copy()
 
-    numOfFrags = len(fragmentBounds)
-    print(numOfFrags)
+        #wydzielenie osobnych fragmentów dla kadej 5-linii
+        fragmentBounds = []
+        fragmentFound = False
+        rowLen = len(img[0])
+        start = 0
+        for n, row in enumerate(sumRows):
+            if row:
+                if not fragmentFound:
+                    fragmentFound = True
+                    start = n
+                #przeszukaj 20 nastepnych wierszy
+                foundLine = False
+                for a in range(1,21):
+                    if (n+a >= len(sumRows)):
+                        break
+                    elif sumRows[n+a]:
+                        foundLine = True
+                        break
+                if foundLine:
+                    sumRows[n+1] = True
+                else:
+                    fragmentFound = False
+                    upper = start - 80
+                    if (upper < MARGIN_VERTICAL):
+                        upper = MARGIN_VERTICAL
+                    lower = n + 40
+                    if (lower > len(img)-MARGIN_VERTICAL):
+                        lower = len(img)-MARGIN_VERTICAL
+                    if ((lower - upper) > 120):
+                        fragmentBounds.append([upper,lower])
+
+        numOfFrags = len(fragmentBounds)
+        if numOfFrags == 6:
+            break
+        thrCorrection += 0.05
 
     if not exists(directory + "/" + fileName):
         makedirs(directory + "/" + fileName)
@@ -231,7 +218,7 @@ def recognizeNotes(image, directory, fileName, saveImages):
         part = mp.erosion(part)
 
         contoursAll = ski.measure.find_contours(part, 0.5)
-        contours, _ = verifyContours(contoursAll)
+        contours = verifyContours(contoursAll)
         keyImage = part[:,40:120]
 
         if saveImages:
