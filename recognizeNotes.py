@@ -11,6 +11,7 @@ from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
 from os import makedirs
 from os.path import exists
+from matplotlib import pylab as plt
 
 # warnings.simplefilter("ignore")
 
@@ -153,6 +154,7 @@ def recognizeNotes(image, directory, fileName, saveImages):
     fragmentBounds = []
     thrCorrection = 0
     numOfFrags = 0
+    iters = 0
     while True:
         for r in range(0,NUM_OF_PARTS_VERTICAL):
             for c in range(0,NUM_OF_PARTS_HORIZONTAL):
@@ -199,24 +201,27 @@ def recognizeNotes(image, directory, fileName, saveImages):
                         fragmentBounds.append([upper,lower])
 
         numOfFrags = len(fragmentBounds)
-        if numOfFrags == 6:
+        if numOfFrags == 6 or iters > 10:
             break
         thrCorrection += 0.05
+        iters += 1
 
     if not exists(directory + "/" + fileName):
         makedirs(directory + "/" + fileName)
 
+    fig, ax = plt.subplots(numOfFrags*2, 1, figsize=(20,numOfFrags*2*4))
     fragment = []
     for i in range(0,numOfFrags):
         fragment.append(img[fragmentBounds[i][0]:fragmentBounds[i][1]])
         part = fragment[i]
         partWithStaff = part.copy()
+        ax[(i*2)+1].imshow(part, cmap='gray')
         part = mp.dilation(part)
         part = mp.erosion(part)
         part = removeStaff(part, sumRowsCpy[fragmentBounds[i][0]:fragmentBounds[i][1]])
         part = mp.dilation(part)
         part = mp.erosion(part)
-
+        ax[i*2].imshow(part, cmap='gray')
         contoursAll = ski.measure.find_contours(part, 0.5)
         contours = verifyContours(contoursAll)
         keyImage = part[:,40:120]
@@ -232,6 +237,7 @@ def recognizeNotes(image, directory, fileName, saveImages):
         oldStaffRows = []
         for noteNumber, contour in enumerate(contours):
             #find rectangle containing note (extreme rows and columns of note contour)
+            ax[i*2].plot(contour[:, 1], contour[:, 0], linewidth=2, color='red')
             tm = int(round(min(contour[:,0]))) #topMargin
             bm = int(round(max(contour[:,0]))) #bottomMargin
             lm = int(round(min(contour[:,1]))) #leftMargin
@@ -261,6 +267,13 @@ def recognizeNotes(image, directory, fileName, saveImages):
                     currentDiff = abs(bm - staff)
                     closest = current
                 current += 0.5
-            Labels.append(classifyNote(closest, part[tm:bm,lm:rm]))
+            val1 = ""
+            noteType, val1 = classifyNote(closest, part[tm:bm,lm:rm])
+            if noteNumber%2 == 0:
+                ax[i*2].annotate(val1 + " " + noteType, xy = ((lm + rm)/2, (tm - 9)), fontsize = 10, color = 'green')
+            else:
+                ax[i*2].annotate(val1 + " " + noteType, xy = ((lm + rm)/2, (bm + 15)), fontsize = 10, color = 'blue')
+            Labels.append(noteType)
         with open(directory + "/" + fileName + "/part" + str(i) + ".txt", "w") as text_file:
             text_file.write(str(Labels))
+    plt.savefig(directory + "/" + fileName + "/part_plots.jpg")
